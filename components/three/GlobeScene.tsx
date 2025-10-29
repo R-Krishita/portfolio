@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Sphere, Line, Points, PointMaterial, Text3D, OrbitControls } from '@react-three/drei';
+import { Sphere, Line, Points, PointMaterial, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useTheme } from 'next-themes';
 
@@ -10,7 +10,13 @@ interface GlobeProps {
   className?: string;
 }
 
-function Globe({ className }: GlobeProps) {
+// Small deterministic pseudo-random generator (pure) for stable builds
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+function Globe() {
   const meshRef = useRef<THREE.Mesh>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -59,7 +65,7 @@ function Globe({ className }: GlobeProps) {
     setMousePosition({ x: x - 0.5, y: y - 0.5 });
   };
 
-  useFrame((state) => {
+  useFrame(() => {
     if (meshRef.current) {
       meshRef.current.rotation.y += 0.002 + mousePosition.x * 0.01;
       meshRef.current.rotation.x += mousePosition.y * 0.005;
@@ -97,15 +103,28 @@ function Globe({ className }: GlobeProps) {
       </Sphere>
       
       {/* Connection points with pulsing effect */}
-      <Points ref={pointsRef} positions={connectionPoints}>
-        <PointMaterial
-          color={pointColor}
-          size={0.03}
-          transparent
-          opacity={0.9}
-          sizeAttenuation
-        />
-      </Points>
+      {/** Drei's <Points> expects a Float32Array or number[] of xyz triplets. */}
+      {/** Convert Vector3[] -> Float32Array for type-safe builds. */}
+      {(() => {
+        const connectionPositions = new Float32Array(connectionPoints.length * 3);
+        connectionPoints.forEach((v, i) => {
+          const idx = i * 3;
+          connectionPositions[idx] = v.x;
+          connectionPositions[idx + 1] = v.y;
+          connectionPositions[idx + 2] = v.z;
+        });
+        return (
+          <Points ref={pointsRef} positions={connectionPositions}>
+            <PointMaterial
+              color={pointColor}
+              size={0.03}
+              transparent
+              opacity={0.9}
+              sizeAttenuation
+            />
+          </Points>
+        );
+      })()}
       
       {/* Animated connection lines */}
       {connections.map((line, index) => (
@@ -115,7 +134,7 @@ function Globe({ className }: GlobeProps) {
           color={lineColor}
           lineWidth={2}
           transparent
-          opacity={0.4 + Math.sin(Date.now() * 0.001 + index) * 0.2}
+          opacity={0.5}
         />
       ))}
       
@@ -135,9 +154,9 @@ function FloatingIcons() {
   const icons = useMemo(() => {
     const positions: THREE.Vector3[] = [];
     for (let i = 0; i < 20; i++) {
-      const radius = 2.5 + Math.random() * 1;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
+      const radius = 2.5 + seededRandom(i + 1) * 1;
+      const theta = seededRandom(i + 2) * Math.PI * 2;
+      const phi = seededRandom(i + 3) * Math.PI;
       
       const x = Math.sin(phi) * Math.cos(theta) * radius;
       const y = Math.sin(phi) * Math.sin(theta) * radius;
@@ -178,14 +197,17 @@ function ParticleField() {
   const particles = useMemo(() => {
     const positions = new Float32Array(2000 * 3);
     for (let i = 0; i < 2000; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+      const r1 = seededRandom(i * 3 + 1) - 0.5;
+      const r2 = seededRandom(i * 3 + 2) - 0.5;
+      const r3 = seededRandom(i * 3 + 3) - 0.5;
+      positions[i * 3] = r1 * 20;
+      positions[i * 3 + 1] = r2 * 20;
+      positions[i * 3 + 2] = r3 * 20;
     }
     return positions;
   }, []);
 
-  useFrame((state) => {
+  useFrame(() => {
     if (pointsRef.current) {
       pointsRef.current.rotation.y += 0.0005;
       pointsRef.current.rotation.x += 0.0002;
